@@ -12,6 +12,30 @@ class Field:
         self.dimentions = dimentions
 
 class Packet:
-    def __init__(self, **kwargs):
+    def __init__(self, id, name, sc, cs, is_info, delta, fields):
+        self.id      = id
+        self.name    = name
+        self.sc      = sc
+        self.cs      = cs
+        self.is_info = is_info
+        self.delta   = delta
+        self.fields  = fields
+
+    def __call__(self, **kwargs):
+        return PacketInstance(self, kwargs)
+
+class PacketInstance:
+    def __init__(self, packet, args):
+        self.packet = packet
+        self.fields = packet.fields
+        self.args = self._parse_args(args)
+
+    def _parse_args(self, args):
+        pass
+
+    def serialize(self):
+        pass
+
+    def dump(self):
         pass
 
