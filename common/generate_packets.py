@@ -1882,4 +1882,7 @@ bool client_handle_packet(enum packet_type type, const void *packet)
 ''')
     f.close()
 
+    import generate_py_packets
+    generate_py_packets.generate_py_packets(types, packets)
+
 main()
