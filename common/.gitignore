@@ -4,5 +4,4 @@
 /libcivcommon.a
 /packets_gen.c
 /packets_gen.h
-/packets.py
 /fc_svnrev_gen.h
