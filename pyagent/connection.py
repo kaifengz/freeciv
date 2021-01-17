@@ -23,8 +23,8 @@ class Connection:
             return len(self._received_bytes) - self._read_offset
 
         if self._received_bytes is None or self._read_offset == len(self._received_bytes):
-            assert self._read_offset == 0
             self._received_bytes = bytes
+            self._read_offset = 0
             return len(self._received_bytes)
 
         elif self._read_offset == 0:
@@ -71,7 +71,7 @@ class Connection:
                 return None
             receive_called = True
 
-        packet_size = dataio.unpack_uint16(self._received_bytes, self._read_offset)[0]
+        packet_size = dataio.unpack_uint16(self._received_bytes, self._read_offset, self._read_offset + 2)[0]
         if packet_size == dataio.JUMBO_SIZE:
             if unparsed_size < 6:
                 if receive_called:
@@ -82,7 +82,7 @@ class Connection:
                 receive_called = True
 
             jumbo_packet_size = dataio.unpack_uint32(
-                    self._received_bytes, self._read_offset + 2)[0]
+                    self._received_bytes, self._read_offset + 2, self._read_offset + 6)[0]
             if unparsed_size < jumbo_packet_size:
                 if receive_called:
                     return None
@@ -108,10 +108,10 @@ class Connection:
 
         return packet
 
-    def send(self, packet):
-        bytes = packet.pack()
+    def send_packet(self, packet, **kwargs):
+        bytes = packet.pack(kwargs)
         self._dump_bytes(bytes, "Sending %d bytes" % len(bytes))
-        self._conn.send(packet.pack())
+        self._conn.send(bytes)
 
     def _dump_bytes(self, bytes, msg = None):
         if not config.enable_network_logging:

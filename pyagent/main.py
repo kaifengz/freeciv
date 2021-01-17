@@ -4,7 +4,8 @@ import packets
 
 def test():
     conn = Connection()
-    conn.send(packets.PACKET_SERVER_JOIN_REQ(
+    conn.send_packet(
+        packets.PACKET_SERVER_JOIN_REQ,
         username = 'pyagent',
         capability = '+Freeciv-2.5-network fake',  # TODO, what capability do we need?
         #  NETWORK_CAPSTRING_MANDATORY="+Freeciv-2.5-network"
@@ -12,7 +13,7 @@ def test():
         version_label = '2.5.12',
         major_version = 2,
         minor_version = 5,
-        patch_version = 12))
+        patch_version = 12)
 
     while True:
         p = conn.get_packet()

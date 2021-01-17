@@ -26,8 +26,8 @@ def _log(level, msg, args):
 
         global _log_file
         if _log_file is None:
-            _log_file = open(config.log_file, "a")
-            print("\n%s Starting" % time_str, file=_log_file)
+            _log_file = open(config.log_file, "w")
+            print("%s Starting" % time_str, file=_log_file)
 
         print("%s %s" % (time_str, msg), file=_log_file, flush=True)
         print(msg)
