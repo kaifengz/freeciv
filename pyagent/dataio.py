@@ -1,5 +1,7 @@
 import struct
 
+import log
+
 JUMBO_SIZE = 0xFFFF
 
 class Type:
@@ -38,7 +40,11 @@ class Field:
         return self._pack(arg)
 
     def unpack(self, bytes, offset, end):
-        return self._unpack(bytes, offset, end)
+        try:
+            return self._unpack(bytes, offset, end)
+        except AttributeError:
+            log.log_error("unpack_%s is not defined!", self.type.dataio_type)
+            raise
 
 class Packet:
     def __init__(self, id, name, sc, cs, is_info, delta, fields):
@@ -80,7 +86,12 @@ class Packet:
         return args
 
     def unpack(self, bytes, offset, end):
-        return PacketInstance.from_bytes(self, bytes, offset, end)
+        try:
+            return PacketInstance.from_bytes(self, bytes, offset, end)
+        except UnpackError:
+            log.log_bytes(bytes, offset - 3, length = end - offset + 3, error = True,
+                    msg = "Unable to unpack %s of size %d" % (self.name, end - offset + 3))
+            raise
 
 class PacketInstance:
     @classmethod
@@ -103,8 +114,25 @@ class PacketInstance:
     def __str__(self):
         return '<%s at 0x%016x>' % (self._packet.name, id(self))
 
+    def dump(self):
+        lines = [
+                "%s at 0x%016x" % (self._packet.name, id(self))
+                ]
+
+        for field in self._packet.fields:
+            lines.append("%20s = %s" % (field.name, getattr(self, field.name)))
+        log.log_verbose('\n'.join(lines))
+
 class BadPacket(Exception):
     pass
+
+class UnpackError(Exception):
+    pass
+
+def unpack_bool8(bytes, offset, end):
+    assert 0 <= offset <= end - 1 and len(bytes) >= end
+    n = struct.unpack_from('!B', bytes, offset)[0]
+    return bool(n), 1
 
 def validate_uint8(n):
     return isinstance(n, int) and 0 <= n <= 0xFF
@@ -113,8 +141,11 @@ def pack_uint8(n):
     assert validate_uint8(n)
     return struct.pack('!B', n)
 
-def unpack_uint8(bytes, offset = 0, end = 1):
-    assert 0 <= offset <= end - 1 and len(bytes) >= end
+def unpack_uint8(bytes, offset, end):
+    if not (0 <= offset <= end - 1 and len(bytes) >= end):
+        raise UnpackError("Insuffient bytes for uint8, need 1, got %d" %
+                (end - offset))
+
     n = struct.unpack_from('!B', bytes, offset)[0]
     return n, 1
 
@@ -125,9 +156,20 @@ def pack_uint16(n):
     assert validate_uint16(n)
     return struct.pack('!H', n)
 
-def unpack_uint16(bytes, offset = 0, end = 2):
-    assert 0 <= offset <= end - 2 and len(bytes) >= end
+def unpack_uint16(bytes, offset, end):
+    if not (0 <= offset <= end - 2 and len(bytes) >= end):
+        raise UnpackError("Insuffient bytes for uint16, need 2, got %d" %
+                (end - offset))
+
     n = struct.unpack_from('!H', bytes, offset)[0]
+    return n, 2
+
+def unpack_sint16(bytes, offset, end):
+    if not (0 <= offset <= end - 2 and len(bytes) >= end):
+        raise UnpackError("Insuffient bytes for sint16, need 2, got %d" %
+                (end - offset))
+
+    n = struct.unpack_from('!h', bytes, offset)[0]
     return n, 2
 
 def validate_uint32(n):
@@ -137,9 +179,20 @@ def pack_uint32(n):
     assert validate_uint32(n)
     return struct.pack('!I', n)
 
-def unpack_uint32(bytes, offset = 0, end = 4):
-    assert 0 <= offset <= end - 4 and len(bytes) >= end, (bytes, offset, end)
+def unpack_uint32(bytes, offset, end):
+    if not (0 <= offset <= end - 4 and len(bytes) >= end):
+        raise UnpackError("Insuffient bytes for uint32, need 4, got %d" %
+                (end - offset))
+
     n = struct.unpack_from('!I', bytes, offset)[0]
+    return n, 4
+
+def unpack_sint32(bytes, offset, end):
+    if not (0 <= offset <= end - 4 and len(bytes) >= end):
+        raise UnpackError("Insuffient bytes for sint32, need 4, got %d" %
+                (end - offset))
+
+    n = struct.unpack_from('!i', bytes, offset)[0]
     return n, 4
 
 def validate_string(s):
@@ -149,8 +202,20 @@ def pack_string(s):
     assert validate_string(s)
     return bytes(s, 'ascii') + b'\0'
 
+def unpack_string(bytes, offset, end):
+    if not (0 <= offset < end <= len(bytes)):
+        raise UnpackError("Insuffient bytes for string, need at least 1, got %d" %
+                (end - offset))
+
+    null_byte = bytes.find(b'\0', offset, end)
+    if null_byte < 0:
+        raise UnpackError("Isn't the string null-terminated? bytes = %s, length = %d" %
+                (bytes[offset : end], end - offset))
+
+    return bytes[offset : null_byte].decode('utf8'), null_byte - offset + 1
+
 def get_packet(packets, bytes, offset):
     packet_size = unpack_uint16(bytes, offset, offset + 2)[0]
     packet_id = unpack_uint8(bytes, offset + 2, offset + 3)[0]
 
-    return packets[packet_id].unpack(bytes, offset + 3, packet_size), packet_size
+    return packets[packet_id].unpack(bytes, offset + 3, offset + packet_size), packet_size

@@ -18,7 +18,7 @@ def test():
     while True:
         p = conn.get_packet()
         if p is not None:
-            log.log_verbose("Got a %s", p)
+            p.dump()
         else:
             import time
             time.sleep(1)

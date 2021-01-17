@@ -14,7 +14,7 @@ def generate_py_packets(types, packets):
 def generate_packets(f, types, packets):
     for p in packets:
         f.write("%s = Packet(\n" % p.type)
-        f.write("    id      = %d,\n"   % p.type_number)
+        f.write("    id      = %d | 0x%02X,\n" % (p.type_number, p.type_number))
         f.write("    name    = '%s',\n" % p.name)
         f.write("    sc      = %s,\n"   % ('sc' in p.dirs))
         f.write("    cs      = %s,\n"   % ('cs' in p.dirs))
@@ -30,7 +30,7 @@ def generate_packets(f, types, packets):
 
     f.write("PACKETS = {\n")
     for p in sorted(packets, key = lambda p: p.type_number):
-        f.write("    %3d : %s,\n" % (p.type_number, p.type))
+        f.write("    %3d | 0x%02X : %s,\n" % (p.type_number, p.type_number, p.type))
     f.write("    }\n")
 
 def generate_field(f, field):

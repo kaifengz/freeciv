@@ -17,7 +17,7 @@ class Connection:
     def _receive(self):
         # TODO: make it unblocking
         bytes = self._conn.recv(4 * 1024 * 1024)
-        self._dump_bytes(bytes, "Received %d bytes" % len(bytes))
+        log.log_bytes(bytes, msg = "Received %d bytes" % len(bytes))
 
         if not bytes:
             return len(self._received_bytes) - self._read_offset
@@ -46,9 +46,9 @@ class Connection:
         bytes = self._received_bytes[ self._read_offset + 6 : jumbo_packet_end ]
         decompressed_bytes = zlib.decompress(bytes)
 
-        self._dump_bytes(
+        log.log_bytes(
                 decompressed_bytes,
-                "Decompressed a jumbo packet, compressed size %d, decompressed size %s" %
+                msg = "Decompressed a jumbo packet, compressed size %d, decompressed size %s" %
                     (len(bytes), len(decompressed_bytes)))
 
         if len(self._received_bytes) == jumbo_packet_end:
@@ -102,6 +102,9 @@ class Connection:
                 return None
             receive_called = True
 
+        log.log_bytes(
+                self._received_bytes, offset = self._read_offset, length = packet_size,
+                msg = "Unpacking a packet of size %d" % packet_size)
         packet, real_packet_size = dataio.get_packet(packets.PACKETS, self._received_bytes, self._read_offset)
         assert packet_size == real_packet_size
         self._read_offset += packet_size
@@ -110,22 +113,6 @@ class Connection:
 
     def send_packet(self, packet, **kwargs):
         bytes = packet.pack(kwargs)
-        self._dump_bytes(bytes, "Sending %d bytes" % len(bytes))
+        log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
         self._conn.send(bytes)
-
-    def _dump_bytes(self, bytes, msg = None):
-        if not config.enable_network_logging:
-            return
-
-        lines = []
-        if msg:
-            lines.append(msg)
-
-        for offset in range(0, len(bytes), 16):
-            line = bytes[offset : offset+16]
-            hex_part = " ".join("%02X" % b for b in line)
-            lit_part = "".join((chr(b) if 32 <= b < 127 else '.') for b in line)
-            lines.append("%6d  %-50s%s" % (offset // 16, hex_part, lit_part))
-
-        log.log_verbose('\n'.join(lines))
 
