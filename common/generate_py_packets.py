@@ -28,7 +28,7 @@ def generate_packets(f, types, packets):
         f.write("    ])\n")
         f.write("\n")
 
-    f.write("packets = {\n")
+    f.write("PACKETS = {\n")
     for p in sorted(packets, key = lambda p: p.type_number):
         f.write("    %3d : %s,\n" % (p.type_number, p.type))
     f.write("    }\n")
