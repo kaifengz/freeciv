@@ -101,10 +101,19 @@ class PacketInstance:
         instance = cls()
         instance._packet = packet
 
-        for field in packet.fields:
-            value, value_size = field.unpack(bytes, offset, end)
-            setattr(instance, field.name, value)
-            offset += value_size
+        if packet.delta:
+            have_field, bitvector_size = unpack_bitvector(bytes, offset, end, len(packet.fields))
+            assert len(have_field) == len(packet.fields)
+            offset += bitvector_size
+
+        for idx,field in enumerate(packet.fields):
+            if packet.delta and not have_field[idx]:
+                setattr(instance, field.name, None)
+
+            else:
+                value, value_size = field.unpack(bytes, offset, end)
+                setattr(instance, field.name, value)
+                offset += value_size
 
         if offset != end:
             raise BadPacket("Bytes not parsed correctly, got %d bytes, parsed %d" %
@@ -213,6 +222,23 @@ def unpack_string(bytes, offset, end):
                 (bytes[offset : end], end - offset))
 
     return bytes[offset : null_byte].decode('utf8'), null_byte - offset + 1
+
+def unpack_bitvector(bytes, offset, end, bitvector_length):
+    bitvector_size = (bitvector_length + 7) // 8
+    if not (0 <= offset and 0 < bitvector_size and offset + bitvector_size <= end <= len(bytes)):
+        raise UnpackError("Insuffient bytes for bitvector, offset %d, end %d, bitvector_length %d, len(bytes) %d" %
+                (offset, end, bitvector_length, len(bytes)))
+
+    bits = struct.unpack_from('%dB' % bitvector_size, bytes, offset)
+    n = 0
+    for b in reversed(bits):
+        n = (n << 8) + b
+
+    bitvector = []
+    for idx in range(bitvector_length):
+        bitvector.append(n % 2 != 0)
+        n //= 2
+    return bitvector, bitvector_size
 
 def get_packet(packets, bytes, offset):
     packet_size = unpack_uint16(bytes, offset, offset + 2)[0]
