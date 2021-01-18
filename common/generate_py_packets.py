@@ -7,6 +7,7 @@ def generate_py_packets(types, packets):
 
     f = open(my_root + "packets.py", "w")
     f.write("from dataio import Type, Field, Packet\n")
+    f.write("from constants import *\n")
     f.write("\n")
 
     generate_packets(f, types, packets)
@@ -44,7 +45,19 @@ def generate_field(f, field):
     f.write("%s      type = Type('%s', '%s'%s),\n" %
             (indent, field.dataio_type, field.struct_type, float_factor))
 
-    f.write("%s      dimentions = []),\n" % indent)
+    if field.dataio_type == 'string':
+        assert 1 <= field.is_array <= 2
+        dimention = None if field.is_array == 1 else field.array_size1_u
+    else:
+        assert 0 <= field.is_array <= 1
+        dimention = None if field.is_array == 0 else field.array_size_u
+
+    if dimention is not None:
+        arrow = dimention.find('->')
+        if arrow >= 0:
+            dimention = "'%s'" % dimention[ arrow+2 : ]
+
+    f.write("%s      dimention = %s),\n" % (indent, dimention))
 
 #        for attrib in dir(p):
 #            if not attrib.startswith("__") and not attrib.endswith("__"):

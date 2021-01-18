@@ -1,3 +1,5 @@
+import itertools
+
 from connection import Connection
 import log
 import packets
@@ -15,13 +17,14 @@ def test():
         minor_version = 5,
         patch_version = 12)
 
-    while True:
+    for loop in itertools.count(1):
         p = conn.get_packet()
         if p is not None:
             p.dump()
-        else:
+
+        if loop % 100 == 0:
             import time
-            time.sleep(1)
+            time.sleep(0.1)
 
 if __name__ == '__main__':
     test()

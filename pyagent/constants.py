@@ -1,0 +1,14 @@
+FEELING_LAST           = 6
+MAX_GRANARY_INIS       = 24
+MAX_NUM_BUILDING_LIST  = 10
+MAX_NUM_ITEMS          = 200
+MAX_NUM_PLAYER_SLOTS   = 128
+MAX_NUM_TECH_LIST      = 10
+MAX_NUM_UNIT_LIST      = 10
+MAX_TRADE_ROUTES       = 5
+OLOSS_LAST             = 2
+O_LAST                 = 6
+S_LAST                 = 6
+
+A_LAST = MAX_NUM_ITEMS
+B_LAST = MAX_NUM_ITEMS

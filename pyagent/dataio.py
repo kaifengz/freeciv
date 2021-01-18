@@ -11,10 +11,10 @@ class Type:
         self.float_factor = float_factor
 
 class Field:
-    def __init__(self, name, type, dimentions):
+    def __init__(self, name, type, dimention):
         self.name = name
         self.type = type
-        self.dimentions = dimentions
+        self.dimention = dimention
 
         try:
             self._validate = globals()['validate_' + self.type.dataio_type]
@@ -91,7 +91,13 @@ class Packet:
         except UnpackError:
             log.log_bytes(bytes, offset - 3, length = end - offset + 3, error = True,
                     msg = "Unable to unpack %s of size %d" % (self.name, end - offset + 3))
-            raise
+            pass  # raise
+        except:
+            pass
+
+        # TODO
+        log.log_error("Unpack error for %s is temporarily suppressed", self.name)
+        return None
 
 class PacketInstance:
     @classmethod
@@ -106,14 +112,29 @@ class PacketInstance:
             assert len(have_field) == len(packet.fields)
             offset += bitvector_size
 
-        for idx,field in enumerate(packet.fields):
+        for idx, field in enumerate(packet.fields):
             if packet.delta and not have_field[idx]:
                 setattr(instance, field.name, None)
+                continue
 
-            else:
+            dimention = field.dimention
+            if dimention is None:
                 value, value_size = field.unpack(bytes, offset, end)
                 setattr(instance, field.name, value)
                 offset += value_size
+
+            else:
+                if not isinstance(dimention, int):
+                    assert isinstance(dimention, str)
+                    dimention = getattr(self, dimention)
+                    assert isinstance(dimention, int)
+
+                values = []
+                for i in range(dimention):
+                    value, value_size = field.unpack(bytes, offset, end)
+                    values.append(value)
+                    offset += value_size
+                setattr(instance, field.name, values)
 
         if offset != end:
             raise BadPacket("Bytes not parsed correctly, got %d bytes, parsed %d" %
