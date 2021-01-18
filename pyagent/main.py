@@ -1,30 +1,34 @@
 import itertools
 
-from connection import Connection
+import connection
+import eventloop
 import log
 import packets
 
-def test():
-    conn = Connection()
+def main():
+    conn = connection.Connection()
     conn.send_packet(
-        packets.PACKET_SERVER_JOIN_REQ,
-        username = 'pyagent',
-        capability = '+Freeciv-2.5-network fake',  # TODO, what capability do we need?
-        #  NETWORK_CAPSTRING_MANDATORY="+Freeciv-2.5-network"
-        #  NETWORK_CAPSTRING_OPTIONAL="nationset_change tech_cost split_reports extended_move_rate illness_ranges nonnatdef cheaper_small_wonders"
-        version_label = '2.5.12',
-        major_version = 2,
-        minor_version = 5,
-        patch_version = 12)
+            packets.PACKET_SERVER_JOIN_REQ,
+            username = 'pyagent',
+            capability = '+Freeciv-2.5-network fake',  # TODO, what capability do we need?
+            #  NETWORK_CAPSTRING_MANDATORY="+Freeciv-2.5-network"
+            #  NETWORK_CAPSTRING_OPTIONAL="nationset_change tech_cost split_reports extended_move_rate illness_ranges nonnatdef cheaper_small_wonders"
+            version_label = '2.5.12',
+            major_version = 2,
+            minor_version = 5,
+            patch_version = 12)
 
-    for loop in itertools.count(1):
-        p = conn.get_packet()
-        if p is not None:
-            p.dump()
+    eventloop.loop(conn)
 
-        if loop % 100 == 0:
-            import time
-            time.sleep(0.1)
+@eventloop.register_packet_handler(packets.PACKET_CONN_PING)
+def handle_conn_ping(conn, packet):
+    log.log_verbose("Got a ping, sending a pong and a chat message ...")
+
+    conn.send_packet(packets.PACKET_CONN_PONG)
+
+    conn.send_packet(
+            packets.PACKET_CHAT_MSG_REQ,
+            message = "Hello, just got your ping")
 
 if __name__ == '__main__':
-    test()
+    main()

@@ -10,19 +10,23 @@ class Connection:
     def __init__(self, host = '127.0.0.1', port = 5557):
         self._conn = socket.socket()
         self._conn.connect((host, port))
+        self._conn.setblocking(False)
 
-        self._received_bytes = None
+        self._received_bytes = b''
         self._read_offset = 0
 
     def _receive(self):
-        # TODO: make it unblocking
-        bytes = self._conn.recv(4 * 1024 * 1024)
+        try:
+            bytes = self._conn.recv(4 * 1024 * 1024)
+        except BlockingIOError as err:
+            return len(self._received_bytes) - self._read_offset
+
         log.log_bytes(bytes, msg = "Received %d bytes" % len(bytes))
 
         if not bytes:
             return len(self._received_bytes) - self._read_offset
 
-        if self._received_bytes is None or self._read_offset == len(self._received_bytes):
+        if self._read_offset == len(self._received_bytes):
             self._received_bytes = bytes
             self._read_offset = 0
             return len(self._received_bytes)
@@ -37,7 +41,6 @@ class Connection:
             return len(self._received_bytes)
 
     def _decompress_jumbo_packet(self, jumbo_packet_size):
-        assert self._received_bytes is not None
         assert jumbo_packet_size > 6
 
         jumbo_packet_end = self._read_offset + jumbo_packet_size
@@ -60,10 +63,7 @@ class Connection:
 
     def get_packet(self):
         receive_called = False
-
-        unparsed_size = 0
-        if self._received_bytes is not None:
-            unparsed_size = len(self._received_bytes) - self._read_offset
+        unparsed_size = len(self._received_bytes) - self._read_offset
 
         if unparsed_size < 2:
             unparsed_size = self._receive()

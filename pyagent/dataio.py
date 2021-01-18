@@ -64,8 +64,13 @@ class Packet:
                 pack_uint16(0),  # packet size
                 pack_uint8(self.id),
                 ]
+
+        if self.delta:
+            fragments.append(pack_bitvector([arg is not None for arg in args]))
+
         for arg, field in zip(args, self.fields):
-            fragments.append(field.pack_arg(arg))
+            if arg is not None:
+                fragments.append(field.pack_arg(arg))
 
         fragments[0] = pack_uint16(sum(map(len, fragments)))
         return b''.join(fragments)
@@ -81,7 +86,12 @@ class Packet:
                 raise BadPacket("Argument %s is not specified" % field.name)
 
             arg = kwargs[field.name]
-            field.validate_arg(arg)
+            if arg is None:
+                if not self.delta:
+                    raise BadPacket("Argument %s should not be None as %s is no-delta" %
+                            (field.name, self.name))
+            else:
+                field.validate_arg(arg)
             args.append(arg)
         return args
 
@@ -105,7 +115,7 @@ class PacketInstance:
         original_offset = offset
 
         instance = cls()
-        instance._packet = packet
+        instance.packet = packet
 
         if packet.delta:
             have_field, bitvector_size = unpack_bitvector(bytes, offset, end, len(packet.fields))
@@ -142,14 +152,14 @@ class PacketInstance:
         return instance
 
     def __str__(self):
-        return '<%s at 0x%016x>' % (self._packet.name, id(self))
+        return '<%s at 0x%016x>' % (self.packet.name, id(self))
 
     def dump(self):
         lines = [
-                "%s at 0x%016x" % (self._packet.name, id(self))
+                "%s at 0x%016x" % (self.packet.name, id(self))
                 ]
 
-        for field in self._packet.fields:
+        for field in self.packet.fields:
             lines.append("%20s = %s" % (field.name, getattr(self, field.name)))
         log.log_verbose('\n'.join(lines))
 
@@ -243,6 +253,18 @@ def unpack_string(bytes, offset, end):
                 (bytes[offset : end], end - offset))
 
     return bytes[offset : null_byte].decode('utf8'), null_byte - offset + 1
+
+def pack_bitvector(bitvector):
+    n = 0
+    for boolean in bitvector:
+        n = n * 2 + int(boolean)
+
+    bitvector_size = (len(bitvector) + 7) // 8
+    bytes_ = [None] * bitvector_size
+    for idx in range(bitvector_size):
+        bytes_[idx] = n % 0x100
+        n //= 0x100
+    return bytes(bytes_)
 
 def unpack_bitvector(bytes, offset, end, bitvector_length):
     bitvector_size = (bitvector_length + 7) // 8
