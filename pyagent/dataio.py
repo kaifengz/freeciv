@@ -18,26 +18,26 @@ class Field:
 
         try:
             self._validate = globals()['validate_' + self.type.dataio_type]
-        except KeyError:
-            pass  # TODO
+        except KeyError as e:
+            self._validate = self.RaiseException(e)  # TODO
 
         try:
             self._pack = globals()['pack_' + self.type.dataio_type]
-        except KeyError:
-            pass  # TODO
+        except KeyError as e:
+            self._pack = self.RaiseException(e)  # TODO
 
         try:
             self._unpack = globals()['unpack_' + self.type.dataio_type]
-        except KeyError:
-            pass  # TODO
+        except KeyError as e:
+            self._unpack = self.RaiseException(e)  # TODO
 
-    def validate_arg(self, arg):
-        if not self._validate(arg):
+    def validate_value(self, value):
+        if not self._validate(value):
             raise BadPacket("Invalid argument for field %s, expected %s" %
                     (self.name, self.type.dataio_type))
 
-    def pack_arg(self, arg):
-        return self._pack(arg)
+    def pack_value(self, value):
+        return self._pack(value)
 
     def unpack(self, bytes, offset, end):
         try:
@@ -45,6 +45,13 @@ class Field:
         except AttributeError:
             log.log_error("unpack_%s is not defined!", self.type.dataio_type)
             raise
+
+    class RaiseException:
+        def __init__(self, msg):
+            self.msg = msg
+
+        def __call__(self, *args, **kwargs):
+            raise Exception(self.msg)
 
 class Packet:
     def __init__(self, id, name, sc, cs, is_info, delta, fields):
@@ -57,8 +64,14 @@ class Packet:
         self.fields  = fields
 
     def pack(self, kwargs):
-        args = self._parse_args(kwargs)
-        assert len(args) == len(self.fields)
+        return self._pack_values(self._parse_args(kwargs))
+
+    def pack_instance(self, instance):
+        return self._pack_values(
+                [getattr(instance, field.name) for field in self.fields])
+
+    def _pack_values(self, values):
+        assert len(values) == len(self.fields)
 
         fragments = [
                 pack_uint16(0),  # packet size
@@ -66,11 +79,11 @@ class Packet:
                 ]
 
         if self.delta:
-            fragments.append(pack_bitvector([arg is not None for arg in args]))
+            fragments.append(pack_bitvector([value is not None for value in values]))
 
-        for arg, field in zip(args, self.fields):
-            if arg is not None:
-                fragments.append(field.pack_arg(arg))
+        for value, field in zip(values, self.fields):
+            if value is not None:
+                fragments.append(field.pack_value(value))
 
         fragments[0] = pack_uint16(sum(map(len, fragments)))
         return b''.join(fragments)
@@ -80,20 +93,20 @@ class Packet:
             raise BadPacket("Argument count %d does not match field count %d" %
                     (len(kwargs), len(self.fields)))
 
-        args = []
+        values = []
         for field in self.fields:
             if field.name not in kwargs:
                 raise BadPacket("Argument %s is not specified" % field.name)
 
-            arg = kwargs[field.name]
-            if arg is None:
+            value = kwargs[field.name]
+            if value is None:
                 if not self.delta:
                     raise BadPacket("Argument %s should not be None as %s is no-delta" %
                             (field.name, self.name))
             else:
-                field.validate_arg(arg)
-            args.append(arg)
-        return args
+                field.validate_value(value)
+            values.append(value)
+        return values
 
     def unpack(self, bytes, offset, end):
         try:
@@ -154,10 +167,13 @@ class PacketInstance:
     def __str__(self):
         return '<%s at 0x%016x>' % (self.packet.name, id(self))
 
-    def dump(self):
-        lines = [
-                "%s at 0x%016x" % (self.packet.name, id(self))
-                ]
+    def dump(self, msg = None):
+        lines = []
+
+        if msg is not None:
+            lines.append(msg)
+
+        lines.append("%s at 0x%016x" % (self.packet.name, id(self)))
 
         for field in self.packet.fields:
             lines.append("%20s = %s" % (field.name, getattr(self, field.name)))
@@ -168,6 +184,13 @@ class BadPacket(Exception):
 
 class UnpackError(Exception):
     pass
+
+def validate_bool8(n):
+    return isinstance(n, bool)
+
+def pack_bool8(n):
+    assert validate_bool8(n)
+    return struct.pack('!B', (1 if n else 0))
 
 def unpack_bool8(bytes, offset, end):
     assert 0 <= offset <= end - 1 and len(bytes) >= end
@@ -204,6 +227,13 @@ def unpack_uint16(bytes, offset, end):
     n = struct.unpack_from('!H', bytes, offset)[0]
     return n, 2
 
+def validate_sint16(n):
+    return isinstance(n, int) and -0x4000 <= n <= 0x3FFF
+
+def pack_sint16(n):
+    assert validate_sint16(n)
+    return struct.pack('!h', n)
+
 def unpack_sint16(bytes, offset, end):
     if not (0 <= offset <= end - 2 and len(bytes) >= end):
         raise UnpackError("Insuffient bytes for sint16, need 2, got %d" %
@@ -226,6 +256,13 @@ def unpack_uint32(bytes, offset, end):
 
     n = struct.unpack_from('!I', bytes, offset)[0]
     return n, 4
+
+def validate_sint32(n):
+    return isinstance(n, int) and -0x8000000 <= n <= 0x7FFFFFFF
+
+def pack_sint32(n):
+    assert validate_sint32(n)
+    return struct.pack('!i', n)
 
 def unpack_sint32(bytes, offset, end):
     if not (0 <= offset <= end - 4 and len(bytes) >= end):

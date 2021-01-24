@@ -7,10 +7,26 @@ import log
 import packets
 
 class Connection:
-    def __init__(self, host = '127.0.0.1', port = 5557):
+    def __init__(self):
+        self._conn = None
+
+    def listen_and_accept(self, host = '127.0.0.1', port = 5558):
+        sock = socket.socket()
+        sock.bind((host, port))
+        sock.listen()
+
+        self._conn = sock.accept()[0]
+        self._init_connection()
+
+    def connect(self, host = '127.0.0.1', port = 5557):
         self._conn = socket.socket()
         self._conn.connect((host, port))
+        self._init_connection()
+
+    def _init_connection(self):
+        assert self._conn is not None
         self._conn.setblocking(False)
+        self.fileno = self._conn.fileno
 
         self._received_bytes = b''
         self._read_offset = 0
@@ -112,7 +128,16 @@ class Connection:
         return packet
 
     def send_packet(self, packet, **kwargs):
-        bytes = packet.pack(kwargs)
-        log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
-        self._conn.send(bytes)
+        if isinstance(packet, dataio.PacketInstance):
+            assert not kwargs
+            bytes = packet.packet.pack_instance(packet)
+            log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
+            self._conn.send(bytes)
 
+        elif isinstance(packet, dataio.Packet):
+            bytes = packet.pack(kwargs)
+            log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
+            self._conn.send(bytes)
+
+        else:
+            assert False, "Unknown argument type: %s" % packet
