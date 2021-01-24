@@ -131,13 +131,15 @@ class Connection:
         if isinstance(packet, dataio.PacketInstance):
             assert not kwargs
             bytes = packet.packet.pack_instance(packet)
-            log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
-            self._conn.send(bytes)
 
         elif isinstance(packet, dataio.Packet):
             bytes = packet.pack(kwargs)
-            log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
-            self._conn.send(bytes)
+
+        elif isinstance(packet, dataio.RawPacket):
+            bytes = packet.bytes
 
         else:
             assert False, "Unknown argument type: %s" % packet
+
+        log.log_bytes(bytes, msg = "Sending %d bytes" % len(bytes))
+        self._conn.send(bytes)

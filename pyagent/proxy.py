@@ -1,6 +1,7 @@
 import itertools
 import queue
 import select
+import time
 
 import connection
 import eventloop
@@ -17,7 +18,7 @@ class Proxy:
 
     def establish_connections(self):
         self._client_conn.listen_and_accept()
-        self._server_conn.connect()
+        self._server_conn.connect(port = 5556)
 
         self._conn_list = [
                 self._client_conn.fileno(),
@@ -41,7 +42,7 @@ class Proxy:
             if p is None:
                 break
 
-            p.dump("Received from client")
+            p.dump("Received from client: ")
             self._server_conn.send_packet(p)
 
     def _on_read_server(self):
@@ -50,7 +51,7 @@ class Proxy:
             if p is None:
                 break
 
-            p.dump("Received from server")
+            p.dump("Received from server: ")
             self._client_conn.send_packet(p)
 
 def main():

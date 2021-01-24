@@ -40,18 +40,14 @@ class Field:
         return self._pack(value)
 
     def unpack(self, bytes, offset, end):
-        try:
-            return self._unpack(bytes, offset, end)
-        except AttributeError:
-            log.log_error("unpack_%s is not defined!", self.type.dataio_type)
-            raise
+        return self._unpack(bytes, offset, end)
 
     class RaiseException:
-        def __init__(self, msg):
-            self.msg = msg
+        def __init__(self, exception):
+            self.exception = exception
 
         def __call__(self, *args, **kwargs):
-            raise Exception(self.msg)
+            raise self.exception
 
 class Packet:
     def __init__(self, id, name, sc, cs, is_info, delta, fields):
@@ -67,8 +63,12 @@ class Packet:
         return self._pack_values(self._parse_args(kwargs))
 
     def pack_instance(self, instance):
-        return self._pack_values(
+        bytes = self._pack_values(
                 [getattr(instance, field.name) for field in self.fields])
+        if bytes != instance.bytes:
+            log.log_bytes(instance.bytes, msg = "Original", error=True)
+            log.log_bytes(bytes, msg = "Packed bytes", error=True)
+        return bytes
 
     def _pack_values(self, values):
         assert len(values) == len(self.fields)
@@ -82,7 +82,14 @@ class Packet:
             fragments.append(pack_bitvector([value is not None for value in values]))
 
         for value, field in zip(values, self.fields):
-            if value is not None:
+            if value is None:
+                continue
+
+            if isinstance(value, list):
+                assert field.dimention is not None
+                for v in value:
+                    fragments.append(field.pack_value(v))
+            else:
                 fragments.append(field.pack_value(value))
 
         fragments[0] = pack_uint16(sum(map(len, fragments)))
@@ -111,24 +118,25 @@ class Packet:
     def unpack(self, bytes, offset, end):
         try:
             return PacketInstance.from_bytes(self, bytes, offset, end)
-        except UnpackError:
-            log.log_bytes(bytes, offset - 3, length = end - offset + 3, error = True,
-                    msg = "Unable to unpack %s of size %d" % (self.name, end - offset + 3))
-            pass  # raise
-        except:
-            pass
+        except Exception as e:  # UnpackError:
+            log.log_bytes(bytes, offset, length = end - offset, error = True,
+                    msg = "Unable to unpack %s of size %d, %s" %
+                            (self.name, end - offset, e))
+            log.log_verbose("Use RawPacket instead")
 
-        # TODO
-        log.log_error("Unpack error for %s is temporarily suppressed", self.name)
-        return None
+        return RawPacket(self, bytes[ offset : end ])
 
 class PacketInstance:
     @classmethod
     def from_bytes(cls, packet, bytes, offset, end):
         original_offset = offset
 
+        # skip the header: packet-size, and packet-id
+        offset += 3
+
         instance = cls()
         instance.packet = packet
+        instance.bytes = bytes[original_offset : end]
 
         if packet.delta:
             have_field, bitvector_size = unpack_bitvector(bytes, offset, end, len(packet.fields))
@@ -149,7 +157,7 @@ class PacketInstance:
             else:
                 if not isinstance(dimention, int):
                     assert isinstance(dimention, str)
-                    dimention = getattr(self, dimention)
+                    dimention = getattr(instance, dimention)
                     assert isinstance(dimention, int)
 
                 values = []
@@ -167,17 +175,28 @@ class PacketInstance:
     def __str__(self):
         return '<%s at 0x%016x>' % (self.packet.name, id(self))
 
-    def dump(self, msg = None):
+    def dump(self, prefix = None):
         lines = []
 
-        if msg is not None:
-            lines.append(msg)
+        if prefix is None:
+            prefix = ''
 
-        lines.append("%s at 0x%016x" % (self.packet.name, id(self)))
+        lines.append("%s%s" % (prefix, self.packet.name))
 
         for field in self.packet.fields:
             lines.append("%20s = %s" % (field.name, getattr(self, field.name)))
         log.log_verbose('\n'.join(lines))
+
+class RawPacket:
+    def __init__(self, packet, bytes):
+        self.packet = packet
+        self.bytes = bytes
+
+    def dump(self, prefix = None):
+        if prefix is None:
+            prefix = ''
+
+        log.log_verbose("%sraw %s" % (prefix, self.packet.name))
 
 class BadPacket(Exception):
     pass
@@ -293,7 +312,7 @@ def unpack_string(bytes, offset, end):
 
 def pack_bitvector(bitvector):
     n = 0
-    for boolean in bitvector:
+    for boolean in reversed(bitvector):
         n = n * 2 + int(boolean)
 
     bitvector_size = (len(bitvector) + 7) // 8
@@ -324,4 +343,4 @@ def get_packet(packets, bytes, offset):
     packet_size = unpack_uint16(bytes, offset, offset + 2)[0]
     packet_id = unpack_uint8(bytes, offset + 2, offset + 3)[0]
 
-    return packets[packet_id].unpack(bytes, offset + 3, offset + packet_size), packet_size
+    return packets[packet_id].unpack(bytes, offset, offset + packet_size), packet_size
